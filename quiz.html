@@ -1,36 +1,36 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Voice Quiz App</title>
+  <title>AI Voice Quiz</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body { font-family: Arial; max-width: 700px; margin: 15px auto; padding: 12px; background: #f4f7fb; }
     h1 { color: #1a4d8f; font-size: 22px; }
-    textarea { width: 100%; height: 100px; font-size: 14px; padding: 8px; box-sizing: border-box; border-radius: 6px; border: 1px solid #ccc; }
+    textarea { width: 100%; height: 140px; font-size: 14px; padding: 8px; box-sizing: border-box; border-radius: 6px; border: 1px solid #ccc; }
     button { padding: 14px 18px; font-size: 16px; margin: 4px 2px; cursor: pointer; border: none; border-radius: 8px; background: #1a4d8f; color: white; }
     button:disabled { background: #aaa; cursor: not-allowed; }
     #submitBtn { background: #16a34a; font-size: 18px; padding: 16px 24px; }
-    #question { font-size: 20px; font-weight: bold; margin: 15px 0; padding: 15px; background: white; border-radius: 8px; border-left: 5px solid #1a4d8f; }
-    #feedback { font-size: 18px; margin: 12px 0; font-weight: bold; min-height: 24px; }
-    .correct { color: green; }
-    .wrong { color: red; }
-    #answerInput { width: 100%; font-size: 20px; padding: 16px; box-sizing: border-box; border: 3px solid #1a4d8f; border-radius: 8px; margin: 10px 0; background: #fffbe6; }
+    #question { font-size: 19px; font-weight: bold; margin: 15px 0; padding: 15px; background: white; border-radius: 8px; border-left: 5px solid #1a4d8f; }
+    #feedback { font-size: 17px; margin: 12px 0; min-height: 24px; padding: 12px; border-radius: 8px; line-height: 1.5; }
+    .correct { color: #15803d; background: #dcfce7; border-left: 5px solid #16a34a; }
+    .wrong { color: #991b1b; background: #fee2e2; border-left: 5px solid #dc2626; }
+    .checking { color: #92400e; background: #fef3c7; border-left: 5px solid #f59e0b; }
+    #answerInput { width: 100%; font-size: 17px; padding: 16px; box-sizing: border-box; border: 3px solid #1a4d8f; border-radius: 8px; margin: 10px 0; background: #fffbe6; }
     #score { font-size: 16px; margin-top: 12px; color: #1a4d8f; font-weight: bold; }
-    #status { font-size: 16px; color: #d97706; font-weight: bold; margin: 10px 0; }
+    #status { font-size: 15px; color: #d97706; font-weight: bold; margin: 10px 0; }
     hr { margin: 20px 0; }
-    .instruction { font-size: 15px; color: #333; background: #e0f2fe; padding: 12px; border-radius: 8px; margin: 12px 0; border-left: 4px solid #0284c7; }
-    .step { margin: 6px 0; }
+    .instruction { font-size: 14px; color: #333; background: #e0f2fe; padding: 12px; border-radius: 8px; margin: 12px 0; border-left: 4px solid #0284c7; }
+    .step { margin: 4px 0; }
   </style>
 </head>
 <body>
-  <h1>🎤 Voice Quiz App</h1>
+  <h1>🤖 AI Voice Quiz</h1>
 
-  <h3>Enter Questions & Answers</h3>
-  <p style="font-size:13px;color:#666;">One per line: <code>question | answer</code></p>
-  <textarea id="input">What is 2 plus 2? | 4
-What is the capital of France? | Paris
-What color is the sky? | blue
-What is 5 plus 3? | 8</textarea>
+  <h3>Questions & Answers</h3>
+  <p style="font-size:13px;color:#666;">One per line: <code>question | answer</code> — long answers OK now!</p>
+  <textarea id="input">What event does Dr. Kurien refer to? | Dr. Kurien refers to the award ceremony in Delhi in 1999, when the President of India conferred the Padma Vibhushan on him.
+How did joining the cooperative affect Dr. Kurien's life? | It transformed his life. It became meaningful service to farmers and shaped his contribution to India's dairy revolution.
+What is 2 plus 2? | 4</textarea>
   <br>
   <button onclick="loadQuiz()">Load Quiz</button>
   <button onclick="speakQuestion()" id="speakBtn" disabled>🔊 Ask Question</button>
@@ -43,7 +43,7 @@ What is 5 plus 3? | 8</textarea>
     <b>How to answer:</b>
     <div class="step">1. Tap the yellow box below 👇</div>
     <div class="step">2. Tap the 🎤 mic on your keyboard</div>
-    <div class="step">3. Say your answer clearly</div>
+    <div class="step">3. Say your answer</div>
     <div class="step">4. Tap <b>Check Answer</b></div>
   </div>
 
@@ -57,6 +57,9 @@ What is 5 plus 3? | 8</textarea>
   <div id="score"></div>
 
 <script>
+const GEMINI_KEY = "";
+const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=";
+
 let quiz = [];
 let current = 0;
 let correctCount = 0;
@@ -64,9 +67,10 @@ let correctCount = 0;
 function loadQuiz() {
   const lines = document.getElementById('input').value.trim().split('\n');
   quiz = lines.map(line => {
-    const parts = line.split('|');
-    return { question: parts[0].trim(), answer: parts[1] ? parts[1].trim() : '' };
-  }).filter(x => x.question && x.answer);
+    const idx = line.indexOf('|');
+    if (idx === -1) return null;
+    return { question: line.slice(0, idx).trim(), answer: line.slice(idx + 1).trim() };
+  }).filter(x => x && x.question && x.answer);
   current = 0;
   correctCount = 0;
   showQuestion();
@@ -102,33 +106,90 @@ function speakQuestion() {
   speechSynthesis.speak(utter);
 }
 
-function submitAnswer() {
-  const spoken = document.getElementById('answerInput').value.toLowerCase().trim();
+async function submitAnswer() {
+  const spoken = document.getElementById('answerInput').value.trim();
   if (!spoken) {
     document.getElementById('status').textContent = "⚠️ Please speak or type an answer first.";
     return;
   }
-  checkAnswer(spoken);
+  document.getElementById('submitBtn').disabled = true;
+  document.getElementById('status').textContent = "🤔 AI is checking your answer...";
+  document.getElementById('feedback').textContent = '';
+  document.getElementById('feedback').className = 'checking';
+
+  try {
+    const result = await askAI(quiz[current].question, quiz[current].answer, spoken);
+    showResult(result, spoken);
+  } catch (err) {
+    document.getElementById('status').textContent = '';
+    document.getElementById('feedback').textContent = "⚠️ Error: " + err.message;
+    document.getElementById('feedback').className = 'wrong';
+    document.getElementById('submitBtn').disabled = false;
+  }
 }
 
-function checkAnswer(spoken) {
-  const correct = quiz[current].answer.toLowerCase().trim();
-  const feedback = document.getElementById('feedback');
+async function askAI(question, correctAnswer, studentAnswer) {
+  const prompt = `You are helping a school student practice at home.
 
-  if (spoken.includes(correct) || correct.includes(spoken)) {
-    feedback.textContent = "✅ Correct!";
-    feedback.className = "correct";
-    correctCount++;
-    speechSynthesis.speak(new SpeechSynthesisUtterance("Correct!"));
-  } else {
-    feedback.textContent = `❌ Wrong. Answer: ${quiz[current].answer}`;
-    feedback.className = "wrong";
-    speechSynthesis.speak(new SpeechSynthesisUtterance(`Wrong. The answer is ${quiz[current].answer}`));
+Question: ${question}
+Correct answer: ${correctAnswer}
+Student's spoken answer: ${studentAnswer}
+
+Task: Decide if the student's answer is correct.
+- If the student's answer has the same meaning as the correct answer (even if worded differently), it is CORRECT.
+- If the student's answer is missing the main point, it is WRONG.
+- Ignore small spelling or speech recognition mistakes.
+
+Reply in exactly this format:
+VERDICT: CORRECT
+REPLY: (one short, kind sentence for the student)`;
+
+  const body = {
+    contents: [{ parts: [{ text: prompt }] }]
+  };
+
+  const response = await fetch(GEMINI_URL + GEMINI_KEY, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    const t = await response.text();
+    throw new Error("AI error " + response.status + ": " + t.slice(0, 200));
   }
+
+  const data = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  const verdict = text.match(/VERDICT:\s*(CORRECT|WRONG)/i);
+  const reply = text.match(/REPLY:\s*(.+)/i);
+
+  return {
+    correct: verdict ? verdict[1].toUpperCase() === 'CORRECT' : false,
+    message: reply ? reply[1].trim() : text.trim()
+  };
+}
+
+function showResult(result, spoken) {
+  const feedback = document.getElementById('feedback');
+  document.getElementById('status').textContent = '';
+
+  if (result.correct) {
+    feedback.textContent = "✅ " + result.message;
+    feedback.className = 'correct';
+    correctCount++;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(new SpeechSynthesisUtterance("Correct! " + result.message));
+  } else {
+    feedback.textContent = "❌ " + result.message + "\n\nCorrect answer: " + quiz[current].answer;
+    feedback.className = 'wrong';
+    speechSynthesis.cancel();
+    speechSynthesis.speak(new SpeechSynthesisUtterance("Not correct. " + result.message));
+  }
+
   document.getElementById('nextBtn').disabled = false;
   document.getElementById('submitBtn').disabled = true;
   document.getElementById('answerInput').disabled = true;
-  document.getElementById('status').textContent = '';
   document.getElementById('score').textContent = `Score: ${correctCount} / ${quiz.length}`;
 }
 
