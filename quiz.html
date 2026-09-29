@@ -50,7 +50,7 @@ What is 5 plus 3? | 8</textarea>
   <input type="text" id="answerInput" placeholder="Tap here, then tap keyboard mic 🎤" disabled autocomplete="off">
 
   <button id="submitBtn" onclick="submitAnswer()" disabled>✅ Check Answer</button>
-  <button id="nextBtn" onclick="nextQuestion()" disabled style="display:none;">➡️ Next</button>
+  <button id="nextBtn" onclick="nextQuestion()" disabled>➡️ Next</button>
 
   <div id="status"></div>
   <div id="feedback"></div>
@@ -78,7 +78,7 @@ function showQuestion() {
     document.getElementById('score').textContent = `Final Score: ${correctCount} / ${quiz.length}`;
     document.getElementById('answerInput').disabled = true;
     document.getElementById('submitBtn').disabled = true;
-    document.getElementById('nextBtn').style.display = 'none';
+    document.getElementById('nextBtn').disabled = true;
     return;
   }
   document.getElementById('question').textContent = `Q${current+1}: ${quiz[current].question}`;
@@ -87,7 +87,7 @@ function showQuestion() {
   document.getElementById('answerInput').value = '';
   document.getElementById('answerInput').disabled = false;
   document.getElementById('submitBtn').disabled = false;
-  document.getElementById('nextBtn').style.display = 'none';
+  document.getElementById('nextBtn').disabled = true;
   document.getElementById('status').textContent = '';
   document.getElementById('score').textContent = `Score: ${correctCount} / ${quiz.length}`;
   document.getElementById('speakBtn').disabled = false;
@@ -125,7 +125,7 @@ function checkAnswer(spoken) {
     feedback.className = "wrong";
     speechSynthesis.speak(new SpeechSynthesisUtterance(`Wrong. The answer is ${quiz[current].answer}`));
   }
-  document.getElementById('nextBtn').style.display = 'inline-block';
+  document.getElementById('nextBtn').disabled = false;
   document.getElementById('submitBtn').disabled = true;
   document.getElementById('answerInput').disabled = true;
   document.getElementById('status').textContent = '';
