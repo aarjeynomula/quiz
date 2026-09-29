@@ -39,11 +39,10 @@ What is 5 plus 3? | 8</textarea>
   <div id="question">Click "Load Quiz" to start</div>
 
   <button id="listenBtn" onclick="listenAnswer()" disabled>🎤 Answer Now</button>
-  <button id="stopBtn" onclick="stopListening()" style="display:none;">🛑 Stop</button>
   <button id="nextBtn" onclick="nextQuestion()" disabled>➡️ Next</button>
 
   <div id="status"></div>
-  <div id="transcript">Live words will appear here...</div>
+  <div id="transcript">Words will appear here...</div>
   <div id="feedback"></div>
   <div id="score"></div>
   <div id="debug">Debug: waiting...</div>
@@ -53,12 +52,11 @@ let quiz = [];
 let current = 0;
 let correctCount = 0;
 let recognition = null;
-let finalText = "";
 let debugLog = [];
 
 function log(msg) {
-  debugLog.push(msg);
-  document.getElementById('debug').textContent = "Debug:\n" + debugLog.slice(-6).join("\n");
+  debugLog.push(new Date().toLocaleTimeString() + " " + msg);
+  document.getElementById('debug').textContent = "Debug:\n" + debugLog.slice(-8).join("\n");
 }
 
 function loadQuiz() {
@@ -79,18 +77,16 @@ function showQuestion() {
     document.getElementById('score').textContent = `Final Score: ${correctCount} / ${quiz.length}`;
     document.getElementById('listenBtn').disabled = true;
     document.getElementById('nextBtn').disabled = true;
-    document.getElementById('stopBtn').style.display = 'none';
     return;
   }
   document.getElementById('question').textContent = `Q${current+1}: ${quiz[current].question}`;
   document.getElementById('feedback').textContent = '';
-  document.getElementById('transcript').textContent = 'Live words will appear here...';
+  document.getElementById('transcript').textContent = 'Words will appear here...';
   document.getElementById('status').textContent = '';
   document.getElementById('score').textContent = `Score: ${correctCount} / ${quiz.length}`;
   document.getElementById('speakBtn').disabled = false;
   document.getElementById('listenBtn').disabled = false;
   document.getElementById('nextBtn').disabled = true;
-  document.getElementById('stopBtn').style.display = 'none';
   speakQuestion();
 }
 
@@ -113,43 +109,33 @@ function listenAnswer() {
 
   recognition = new SR();
   recognition.lang = 'en-US';
-  recognition.interimResults = true;
-  recognition.continuous = true;
+  recognition.interimResults = false;   // ← CHANGED: final only
+  recognition.continuous = false;       // ← CHANGED: auto-stops when you stop speaking
   recognition.maxAlternatives = 1;
 
-  finalText = "";
-  document.getElementById('transcript').textContent = 'Live words will appear here...';
+  document.getElementById('transcript').textContent = 'Speak now...';
   document.getElementById('feedback').textContent = '';
-  document.getElementById('status').textContent = '🎧 Listening... speak, then tap 🛑 Stop';
+  document.getElementById('status').textContent = '🎧 Listening... speak your answer';
   document.getElementById('listenBtn').disabled = true;
-  document.getElementById('stopBtn').style.display = 'inline-block';
   document.getElementById('nextBtn').disabled = true;
 
-  recognition.onstart = () => log("onstart fired");
-
-  recognition.onaudiostart = () => log("onaudiostart — mic opened");
-  recognition.onaudioend = () => log("onaudioend — mic closed");
-
-  recognition.onspeechstart = () => log("onspeechstart — voice detected!");
+  recognition.onstart = () => log("onstart");
+  recognition.onaudiostart = () => log("onaudiostart");
+  recognition.onspeechstart = () => { log("onspeechstart"); document.getElementById('transcript').textContent = '👂 Hearing you...'; };
+  recognition.onspeechend = () => log("onspeechend");
+  recognition.onaudioend = () => log("onaudioend");
 
   recognition.onresult = (event) => {
-    let interim = "";
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const txt = event.results[i][0].transcript;
-      if (event.results[i].isFinal) {
-        finalText += txt + " ";
-        log("FINAL: " + txt);
-      } else {
-        interim += txt;
-      }
-    }
-    document.getElementById('transcript').textContent = `Heard: "${finalText || interim}"`;
+    const spoken = event.results[0][0].transcript;
+    log("RESULT: " + spoken);
+    document.getElementById('transcript').textContent = `Heard: "${spoken}"`;
+    checkAnswer(spoken.toLowerCase().trim());
   };
 
   recognition.onerror = (e) => {
-    log("error: " + e.error);
+    log("ERROR: " + e.error);
     if (e.error === "no-speech") {
-      document.getElementById('status').textContent = "❌ No speech detected.";
+      document.getElementById('status').textContent = "❌ No speech heard. Try again.";
     } else if (e.error === "not-allowed") {
       document.getElementById('status').textContent = "❌ Mic blocked.";
     } else if (e.error === "aborted") {
@@ -158,34 +144,22 @@ function listenAnswer() {
       document.getElementById('status').textContent = "❌ " + e.error;
     }
     document.getElementById('listenBtn').disabled = false;
-    document.getElementById('stopBtn').style.display = 'none';
   };
 
   recognition.onend = () => {
-    log("onend. finalText='" + finalText.trim() + "'");
-    document.getElementById('stopBtn').style.display = 'none';
-    const spoken = finalText.trim().toLowerCase();
-    if (spoken) {
-      checkAnswer(spoken);
-    } else {
-      document.getElementById('status').textContent = "❌ No answer heard. Tap 🎤 Answer Now.";
+    log("onend");
+    document.getElementById('status').textContent = '';
+    if (!document.getElementById('feedback').textContent) {
       document.getElementById('listenBtn').disabled = false;
     }
   };
 
   try {
     recognition.start();
-    log("recognition.start() called");
+    log("start() called");
   } catch(e) {
     log("start error: " + e.message);
   }
-}
-
-function stopListening() {
-  if (recognition) {
-    try { recognition.stop(); } catch(e) {}
-  }
-  document.getElementById('status').textContent = "⏳ Processing...";
 }
 
 function checkAnswer(spoken) {
@@ -204,7 +178,6 @@ function checkAnswer(spoken) {
   }
   document.getElementById('nextBtn').disabled = false;
   document.getElementById('listenBtn').disabled = true;
-  document.getElementById('status').textContent = '';
   document.getElementById('score').textContent = `Score: ${correctCount} / ${quiz.length}`;
 }
 
