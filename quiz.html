@@ -6,7 +6,7 @@
   <style>
     body { font-family: Arial; max-width: 700px; margin: 15px auto; padding: 12px; background: #f4f7fb; }
     h1 { color: #1a4d8f; font-size: 22px; }
-    textarea { width: 100%; height: 120px; font-size: 14px; padding: 8px; box-sizing: border-box; border-radius: 6px; border: 1px solid #ccc; }
+    textarea { width: 100%; height: 100px; font-size: 14px; padding: 8px; box-sizing: border-box; border-radius: 6px; border: 1px solid #ccc; }
     button { padding: 14px 18px; font-size: 16px; margin: 4px 2px; cursor: pointer; border: none; border-radius: 8px; background: #1a4d8f; color: white; }
     button:disabled { background: #aaa; cursor: not-allowed; }
     #stopBtn { background: #c81e1e; }
@@ -14,9 +14,10 @@
     #feedback { font-size: 18px; margin: 12px 0; font-weight: bold; min-height: 24px; }
     .correct { color: green; }
     .wrong { color: red; }
-    #transcript { font-style: italic; color: #555; margin: 8px 0; min-height: 22px; }
+    #transcript { font-size: 16px; color: #333; margin: 8px 0; min-height: 22px; padding: 8px; background: #fffbe6; border-radius: 6px; }
     #score { font-size: 16px; margin-top: 12px; color: #1a4d8f; font-weight: bold; }
-    #status { font-size: 20px; color: #d97706; font-weight: bold; margin: 10px 0; min-height: 26px; }
+    #status { font-size: 18px; color: #d97706; font-weight: bold; margin: 10px 0; min-height: 26px; }
+    #debug { font-size: 12px; color: #888; margin-top: 10px; padding: 6px; background: #f0f0f0; border-radius: 4px; white-space: pre-wrap; }
     hr { margin: 20px 0; }
   </style>
 </head>
@@ -42,15 +43,23 @@ What is 5 plus 3? | 8</textarea>
   <button id="nextBtn" onclick="nextQuestion()" disabled>➡️ Next</button>
 
   <div id="status"></div>
-  <div id="transcript"></div>
+  <div id="transcript">Live words will appear here...</div>
   <div id="feedback"></div>
   <div id="score"></div>
+  <div id="debug">Debug: waiting...</div>
 
 <script>
 let quiz = [];
 let current = 0;
 let correctCount = 0;
 let recognition = null;
+let finalText = "";
+let debugLog = [];
+
+function log(msg) {
+  debugLog.push(msg);
+  document.getElementById('debug').textContent = "Debug:\n" + debugLog.slice(-6).join("\n");
+}
 
 function loadQuiz() {
   const lines = document.getElementById('input').value.trim().split('\n');
@@ -60,16 +69,14 @@ function loadQuiz() {
   }).filter(x => x.question && x.answer);
   current = 0;
   correctCount = 0;
+  debugLog = [];
   showQuestion();
 }
 
 function showQuestion() {
   if (current >= quiz.length) {
     document.getElementById('question').textContent = "🎉 Quiz finished!";
-    document.getElementById('feedback').textContent = "";
-    document.getElementById('status').textContent = "";
     document.getElementById('score').textContent = `Final Score: ${correctCount} / ${quiz.length}`;
-    document.getElementById('speakBtn').disabled = true;
     document.getElementById('listenBtn').disabled = true;
     document.getElementById('nextBtn').disabled = true;
     document.getElementById('stopBtn').style.display = 'none';
@@ -77,7 +84,7 @@ function showQuestion() {
   }
   document.getElementById('question').textContent = `Q${current+1}: ${quiz[current].question}`;
   document.getElementById('feedback').textContent = '';
-  document.getElementById('transcript').textContent = '';
+  document.getElementById('transcript').textContent = 'Live words will appear here...';
   document.getElementById('status').textContent = '';
   document.getElementById('score').textContent = `Score: ${correctCount} / ${quiz.length}`;
   document.getElementById('speakBtn').disabled = false;
@@ -96,84 +103,89 @@ function speakQuestion() {
 }
 
 function listenAnswer() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
     alert("Speech recognition not supported. Use Chrome.");
     return;
   }
 
   if (recognition) { try { recognition.abort(); } catch(e) {} }
 
-  recognition = new SpeechRecognition();
+  recognition = new SR();
   recognition.lang = 'en-US';
   recognition.interimResults = true;
-  recognition.continuous = true;   // keep listening until YOU press stop
+  recognition.continuous = true;
   recognition.maxAlternatives = 1;
 
-  document.getElementById('transcript').textContent = '';
+  finalText = "";
+  document.getElementById('transcript').textContent = 'Live words will appear here...';
   document.getElementById('feedback').textContent = '';
-  document.getElementById('status').textContent = '🎧 Listening... speak your answer, then tap 🛑 Stop';
+  document.getElementById('status').textContent = '🎧 Listening... speak, then tap 🛑 Stop';
   document.getElementById('listenBtn').disabled = true;
   document.getElementById('stopBtn').style.display = 'inline-block';
   document.getElementById('nextBtn').disabled = true;
 
-  let finalText = "";
+  recognition.onstart = () => log("onstart fired");
 
-  try { recognition.start(); } catch(e) {
-    document.getElementById('status').textContent = "Error starting mic. Try again.";
-    document.getElementById('listenBtn').disabled = false;
-    document.getElementById('stopBtn').style.display = 'none';
-    return;
-  }
+  recognition.onaudiostart = () => log("onaudiostart — mic opened");
+  recognition.onaudioend = () => log("onaudioend — mic closed");
+
+  recognition.onspeechstart = () => log("onspeechstart — voice detected!");
 
   recognition.onresult = (event) => {
     let interim = "";
     for (let i = event.resultIndex; i < event.results.length; i++) {
       const txt = event.results[i][0].transcript;
-      if (event.results[i].isFinal) finalText += txt + " ";
-      else interim += txt;
+      if (event.results[i].isFinal) {
+        finalText += txt + " ";
+        log("FINAL: " + txt);
+      } else {
+        interim += txt;
+      }
     }
-    document.getElementById('transcript').textContent = `You said: "${finalText || interim}"`;
+    document.getElementById('transcript').textContent = `Heard: "${finalText || interim}"`;
   };
 
   recognition.onerror = (e) => {
+    log("error: " + e.error);
     if (e.error === "no-speech") {
-      document.getElementById('status').textContent = "❌ No speech heard. Tap 🎤 Answer Now again.";
+      document.getElementById('status').textContent = "❌ No speech detected.";
     } else if (e.error === "not-allowed") {
-      document.getElementById('status').textContent = "❌ Mic blocked. Allow mic in Chrome settings.";
+      document.getElementById('status').textContent = "❌ Mic blocked.";
     } else if (e.error === "aborted") {
-      // user pressed stop — ignore
       return;
     } else {
-      document.getElementById('status').textContent = "❌ Error: " + e.error;
+      document.getElementById('status').textContent = "❌ " + e.error;
     }
     document.getElementById('listenBtn').disabled = false;
     document.getElementById('stopBtn').style.display = 'none';
   };
 
-  // When recognition stops, check the answer
   recognition.onend = () => {
+    log("onend. finalText='" + finalText.trim() + "'");
     document.getElementById('stopBtn').style.display = 'none';
     const spoken = finalText.trim().toLowerCase();
     if (spoken) {
       checkAnswer(spoken);
     } else {
-      document.getElementById('status').textContent = "❌ No answer heard. Tap 🎤 Answer Now to retry.";
+      document.getElementById('status').textContent = "❌ No answer heard. Tap 🎤 Answer Now.";
       document.getElementById('listenBtn').disabled = false;
     }
   };
 
-  // Expose a way for stop button to access recognition
-  window.__recognition = recognition;
-  window.__finalTextRef = () => finalText;
+  try {
+    recognition.start();
+    log("recognition.start() called");
+  } catch(e) {
+    log("start error: " + e.message);
+  }
 }
 
 function stopListening() {
-  // Tell recognition we're done
-  if (window.__recognition) {
-    try { window.__recognition.stop(); } catch(e) {}
+  if (recognition) {
+    try { recognition.stop(); } catch(e) {}
   }
-  document.getElementById('status').textContent = "⏳ Processing your answer...";
+  document.getElementById('status').textContent = "⏳ Processing...";
 }
 
 function checkAnswer(spoken) {
