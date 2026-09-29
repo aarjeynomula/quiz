@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Voice Quiz App</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: Arial; max-width: 700px; margin: 20px auto; padding: 15px; background: #f4f7fb; }
+    h1 { color: #1a4d8f; }
+    textarea { width: 100%; height: 140px; font-size: 14px; padding: 8px; box-sizing: border-box; }
+    button { padding: 14px 22px; font-size: 16px; margin: 5px 3px; cursor: pointer; border: none; border-radius: 8px; background: #1a4d8f; color: white; }
+    button:disabled { background: #aaa; cursor: not-allowed; }
+    #question { font-size: 22px; font-weight: bold; margin: 20px 0; padding: 15px; background: white; border-radius: 8px; }
+    #feedback { font-size: 20px; margin: 15px 0; font-weight: bold; }
+    .correct { color: green; }
+    .wrong { color: red; }
+    #transcript { font-style: italic; color: #555; margin: 10px 0; }
+    #score { font-size: 18px; margin-top: 15px; color: #1a4d8f; }
+  </style>
+</head>
+<body>
+  <h1>🎤 Voice Quiz App</h1>
+
+  <h3>Step 1: Enter Questions & Answers</h3>
+  <p>One per line, format: <code>question | answer</code></p>
+  <textarea id="input">What is 2 plus 2? | 4
+What is the capital of France? | Paris
+What color is the sky? | blue
+What is 5 plus 3? | 8</textarea>
+  <br>
+  <button onclick="loadQuiz()">Load Quiz</button>
+
+  <hr>
+
+  <div id="question">Click "Load Quiz" to start</div>
+  <button id="speakBtn" onclick="speakQuestion()" disabled>🔊 Ask Question</button>
+  <button id="listenBtn" onclick="listenAnswer()" disabled>🎤 Answer Now</button>
+  <button id="nextBtn" onclick="nextQuestion()" disabled>➡️ Next</button>
+
+  <div id="transcript"></div>
+  <div id="feedback"></div>
+  <div id="score"></div>
+
+<script>
+let quiz = [];
+let current = 0;
+let correctCount = 0;
+
+function loadQuiz() {
+  const lines = document.getElementById('input').value.trim().split('\n');
+  quiz = lines.map(line => {
+    const parts = line.split('|');
+    return { question: parts[0].trim(), answer: parts[1] ? parts[1].trim() : '' };
+  }).filter(x => x.question && x.answer);
+  current = 0;
+  correctCount = 0;
+  showQuestion();
+}
+
+function showQuestion() {
+  if (current >= quiz.length) {
+    document.getElementById('question').textContent = "🎉 Quiz finished!";
+    document.getElementById('feedback').textContent = "";
+    document.getElementById('score').textContent = `Final Score: ${correctCount} / ${quiz.length}`;
+    document.getElementById('speakBtn').disabled = true;
+    document.getElementById('listenBtn').disabled = true;
+    document.getElementById('nextBtn').disabled = true;
+    return;
+  }
+  document.getElementById('question').textContent = `Q${current+1}: ${quiz[current].question}`;
+  document.getElementById('feedback').textContent = '';
+  document.getElementById('transcript').textContent = '';
+  document.getElementById('score').textContent = `Score: ${correctCount} / ${quiz.length}`;
+  document.getElementById('speakBtn').disabled = false;
+  document.getElementById('listenBtn').disabled = false;
+  document.getElementById('nextBtn').disabled = true;
+  speakQuestion();
+}
+
+function speakQuestion() {
+  speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(quiz[current].question);
+  utter.lang = 'en-US';
+  utter.rate = 0.9;
+  speechSynthesis.speak(utter);
+}
+
+function listenAnswer() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    alert("Speech recognition not supported. Please use Chrome or Edge browser.");
+    return;
+  }
+  const recog = new SpeechRecognition();
+  recog.lang = 'en-US';
+  recog.interimResults = false;
+  recog.maxAlternatives = 1;
+
+  document.getElementById('transcript').textContent = "🎧 Listening...";
+  recog.start();
+
+  recog.onresult = (event) => {
+    const spoken = event.results[0][0].transcript.toLowerCase().trim();
+    document.getElementById('transcript').textContent = `You said: "${spoken}"`;
+    checkAnswer(spoken);
+  };
+
+  recog.onerror = (e) => {
+    document.getElementById('transcript').textContent = "Error: " + e.error + " — please try again.";
+  };
+}
+
+function checkAnswer(spoken) {
+  const correct = quiz[current].answer.toLowerCase().trim();
+  const feedback = document.getElementById('feedback');
+
+  if (spoken.includes(correct) || correct.includes(spoken)) {
+    feedback.textContent = "✅ Correct!";
+    feedback.className = "correct";
+    correctCount++;
+    const utter = new SpeechSynthesisUtterance("Correct!");
+    speechSynthesis.speak(utter);
+  } else {
+    feedback.textContent = `❌ Wrong. Correct answer: ${quiz[current].answer}`;
+    feedback.className = "wrong";
+    const utter = new SpeechSynthesisUtterance(`That is not correct. The answer is ${quiz[current].answer}`);
+    speechSynthesis.speak(utter);
+  }
+  document.getElementById('nextBtn').disabled = false;
+  document.getElementById('listenBtn').disabled = true;
+}
+
+function nextQuestion() {
+  current++;
+  showQuestion();
+}
+</script>
+</body>
+</html>
