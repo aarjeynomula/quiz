@@ -4,38 +4,44 @@
   <title>Voice Quiz App</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { font-family: Arial; max-width: 700px; margin: 20px auto; padding: 15px; background: #f4f7fb; }
-    h1 { color: #1a4d8f; }
-    textarea { width: 100%; height: 140px; font-size: 14px; padding: 8px; box-sizing: border-box; }
-    button { padding: 14px 22px; font-size: 16px; margin: 5px 3px; cursor: pointer; border: none; border-radius: 8px; background: #1a4d8f; color: white; }
+    body { font-family: Arial; max-width: 700px; margin: 15px auto; padding: 12px; background: #f4f7fb; }
+    h1 { color: #1a4d8f; font-size: 22px; }
+    textarea { width: 100%; height: 120px; font-size: 14px; padding: 8px; box-sizing: border-box; border-radius: 6px; border: 1px solid #ccc; }
+    button { padding: 14px 18px; font-size: 16px; margin: 4px 2px; cursor: pointer; border: none; border-radius: 8px; background: #1a4d8f; color: white; }
     button:disabled { background: #aaa; cursor: not-allowed; }
-    #question { font-size: 22px; font-weight: bold; margin: 20px 0; padding: 15px; background: white; border-radius: 8px; }
-    #feedback { font-size: 20px; margin: 15px 0; font-weight: bold; }
+    #stopBtn { background: #c81e1e; }
+    #question { font-size: 20px; font-weight: bold; margin: 15px 0; padding: 15px; background: white; border-radius: 8px; border-left: 5px solid #1a4d8f; }
+    #feedback { font-size: 18px; margin: 12px 0; font-weight: bold; min-height: 24px; }
     .correct { color: green; }
     .wrong { color: red; }
-    #transcript { font-style: italic; color: #555; margin: 10px 0; }
-    #score { font-size: 18px; margin-top: 15px; color: #1a4d8f; }
+    #transcript { font-style: italic; color: #555; margin: 8px 0; min-height: 22px; }
+    #score { font-size: 16px; margin-top: 12px; color: #1a4d8f; font-weight: bold; }
+    #status { font-size: 20px; color: #d97706; font-weight: bold; margin: 10px 0; min-height: 26px; }
+    hr { margin: 20px 0; }
   </style>
 </head>
 <body>
   <h1>🎤 Voice Quiz App</h1>
 
-  <h3>Step 1: Enter Questions & Answers</h3>
-  <p>One per line, format: <code>question | answer</code></p>
+  <h3>Enter Questions & Answers</h3>
+  <p style="font-size:13px;color:#666;">One per line: <code>question | answer</code></p>
   <textarea id="input">What is 2 plus 2? | 4
 What is the capital of France? | Paris
 What color is the sky? | blue
 What is 5 plus 3? | 8</textarea>
   <br>
   <button onclick="loadQuiz()">Load Quiz</button>
+  <button onclick="speakQuestion()" id="speakBtn" disabled>🔊 Ask Question</button>
 
   <hr>
 
   <div id="question">Click "Load Quiz" to start</div>
-  <button id="speakBtn" onclick="speakQuestion()" disabled>🔊 Ask Question</button>
+
   <button id="listenBtn" onclick="listenAnswer()" disabled>🎤 Answer Now</button>
+  <button id="stopBtn" onclick="stopListening()" style="display:none;">🛑 Stop</button>
   <button id="nextBtn" onclick="nextQuestion()" disabled>➡️ Next</button>
 
+  <div id="status"></div>
   <div id="transcript"></div>
   <div id="feedback"></div>
   <div id="score"></div>
@@ -44,6 +50,7 @@ What is 5 plus 3? | 8</textarea>
 let quiz = [];
 let current = 0;
 let correctCount = 0;
+let recognition = null;
 
 function loadQuiz() {
   const lines = document.getElementById('input').value.trim().split('\n');
@@ -60,19 +67,23 @@ function showQuestion() {
   if (current >= quiz.length) {
     document.getElementById('question').textContent = "🎉 Quiz finished!";
     document.getElementById('feedback').textContent = "";
+    document.getElementById('status').textContent = "";
     document.getElementById('score').textContent = `Final Score: ${correctCount} / ${quiz.length}`;
     document.getElementById('speakBtn').disabled = true;
     document.getElementById('listenBtn').disabled = true;
     document.getElementById('nextBtn').disabled = true;
+    document.getElementById('stopBtn').style.display = 'none';
     return;
   }
   document.getElementById('question').textContent = `Q${current+1}: ${quiz[current].question}`;
   document.getElementById('feedback').textContent = '';
   document.getElementById('transcript').textContent = '';
+  document.getElementById('status').textContent = '';
   document.getElementById('score').textContent = `Score: ${correctCount} / ${quiz.length}`;
   document.getElementById('speakBtn').disabled = false;
   document.getElementById('listenBtn').disabled = false;
   document.getElementById('nextBtn').disabled = true;
+  document.getElementById('stopBtn').style.display = 'none';
   speakQuestion();
 }
 
@@ -87,26 +98,82 @@ function speakQuestion() {
 function listenAnswer() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
-    alert("Speech recognition not supported. Please use Chrome or Edge browser.");
+    alert("Speech recognition not supported. Use Chrome.");
     return;
   }
-  const recog = new SpeechRecognition();
-  recog.lang = 'en-US';
-  recog.interimResults = false;
-  recog.maxAlternatives = 1;
 
-  document.getElementById('transcript').textContent = "🎧 Listening...";
-  recog.start();
+  if (recognition) { try { recognition.abort(); } catch(e) {} }
 
-  recog.onresult = (event) => {
-    const spoken = event.results[0][0].transcript.toLowerCase().trim();
-    document.getElementById('transcript').textContent = `You said: "${spoken}"`;
-    checkAnswer(spoken);
+  recognition = new SpeechRecognition();
+  recognition.lang = 'en-US';
+  recognition.interimResults = true;
+  recognition.continuous = true;   // keep listening until YOU press stop
+  recognition.maxAlternatives = 1;
+
+  document.getElementById('transcript').textContent = '';
+  document.getElementById('feedback').textContent = '';
+  document.getElementById('status').textContent = '🎧 Listening... speak your answer, then tap 🛑 Stop';
+  document.getElementById('listenBtn').disabled = true;
+  document.getElementById('stopBtn').style.display = 'inline-block';
+  document.getElementById('nextBtn').disabled = true;
+
+  let finalText = "";
+
+  try { recognition.start(); } catch(e) {
+    document.getElementById('status').textContent = "Error starting mic. Try again.";
+    document.getElementById('listenBtn').disabled = false;
+    document.getElementById('stopBtn').style.display = 'none';
+    return;
+  }
+
+  recognition.onresult = (event) => {
+    let interim = "";
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const txt = event.results[i][0].transcript;
+      if (event.results[i].isFinal) finalText += txt + " ";
+      else interim += txt;
+    }
+    document.getElementById('transcript').textContent = `You said: "${finalText || interim}"`;
   };
 
-  recog.onerror = (e) => {
-    document.getElementById('transcript').textContent = "Error: " + e.error + " — please try again.";
+  recognition.onerror = (e) => {
+    if (e.error === "no-speech") {
+      document.getElementById('status').textContent = "❌ No speech heard. Tap 🎤 Answer Now again.";
+    } else if (e.error === "not-allowed") {
+      document.getElementById('status').textContent = "❌ Mic blocked. Allow mic in Chrome settings.";
+    } else if (e.error === "aborted") {
+      // user pressed stop — ignore
+      return;
+    } else {
+      document.getElementById('status').textContent = "❌ Error: " + e.error;
+    }
+    document.getElementById('listenBtn').disabled = false;
+    document.getElementById('stopBtn').style.display = 'none';
   };
+
+  // When recognition stops, check the answer
+  recognition.onend = () => {
+    document.getElementById('stopBtn').style.display = 'none';
+    const spoken = finalText.trim().toLowerCase();
+    if (spoken) {
+      checkAnswer(spoken);
+    } else {
+      document.getElementById('status').textContent = "❌ No answer heard. Tap 🎤 Answer Now to retry.";
+      document.getElementById('listenBtn').disabled = false;
+    }
+  };
+
+  // Expose a way for stop button to access recognition
+  window.__recognition = recognition;
+  window.__finalTextRef = () => finalText;
+}
+
+function stopListening() {
+  // Tell recognition we're done
+  if (window.__recognition) {
+    try { window.__recognition.stop(); } catch(e) {}
+  }
+  document.getElementById('status').textContent = "⏳ Processing your answer...";
 }
 
 function checkAnswer(spoken) {
@@ -117,16 +184,16 @@ function checkAnswer(spoken) {
     feedback.textContent = "✅ Correct!";
     feedback.className = "correct";
     correctCount++;
-    const utter = new SpeechSynthesisUtterance("Correct!");
-    speechSynthesis.speak(utter);
+    speechSynthesis.speak(new SpeechSynthesisUtterance("Correct!"));
   } else {
-    feedback.textContent = `❌ Wrong. Correct answer: ${quiz[current].answer}`;
+    feedback.textContent = `❌ Wrong. Answer: ${quiz[current].answer}`;
     feedback.className = "wrong";
-    const utter = new SpeechSynthesisUtterance(`That is not correct. The answer is ${quiz[current].answer}`);
-    speechSynthesis.speak(utter);
+    speechSynthesis.speak(new SpeechSynthesisUtterance(`Wrong. The answer is ${quiz[current].answer}`));
   }
   document.getElementById('nextBtn').disabled = false;
   document.getElementById('listenBtn').disabled = true;
+  document.getElementById('status').textContent = '';
+  document.getElementById('score').textContent = `Score: ${correctCount} / ${quiz.length}`;
 }
 
 function nextQuestion() {
